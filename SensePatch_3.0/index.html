@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulador Sensorial Realista</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      background: linear-gradient(135deg, #1e3a8a, #4f46e5);
+      color: white;
+      transition: background 0.5s ease;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      padding: 2rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    .panel, .visual {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(6px);
+      padding: 2rem;
+      border-radius: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-weight: 500;
+    }
+
+    input[type=range] {
+      width: 100%;
+    }
+
+    .slider-group {
+      margin-bottom: 1.5rem;
+    }
+
+    button {
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      background: #3b82f6;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #2563eb;
+    }
+
+    .estado {
+      font-size: 2rem;
+      font-weight: 600;
+      text-align: center;
+      margin: 1rem 0;
+    }
+
+    .recommendation {
+      background: rgba(255,255,255,0.1);
+      padding: 1rem;
+      border-left: 6px solid #10b981;
+      margin-top: 1rem;
+      border-radius: 10px;
+      font-style: italic;
+    }
+
+    .figure {
+      position: relative;
+      width: 200px;
+      margin: auto;
+    }
+
+    .figure img.head {
+      width: 100%;
+      display: block;
+      filter: brightness(0.95);
+      z-index: 1;
+    }
+
+    .chip {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      top: 61%;
+      left: 52%;
+      transform: translate(-50%, -50%);
+      animation: glow 2s infinite ease-in-out;
+      z-index: 2;
+    }
+
+    @keyframes glow {
+      0%, 100% { filter: drop-shadow(0 0 5px #38bdf8); }
+      50% { filter: drop-shadow(0 0 20px #0ea5e9); }
+    }
+
+    canvas {
+      background: #2d2d2d;
+      border-radius: 12px;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<audio id="scanSound" src="https://assets.mixkit.co/sfx/preview/mixkit-digital-scan-917.mp3"></audio>
+<audio id="finishBeep" src="https://assets.mixkit.co/sfx/preview/mixkit-digital-quick-tone-2863.mp3"></audio>
+
+<div class="container">
+  <div class="panel">
+    <h2>🔬 Medición del Parche Sensorial</h2>
+
+    <div class="slider-group">
+      <label for="stress">⚠️ Estrés: <span id="stressVal">30</span>%</label>
+      <input type="range" id="stress" min="0" max="100" value="30">
+    </div>
+    <div class="slider-group">
+      <label for="dopamine">🧬 Cortisona: <span id="dopamineVal">50</span>%</label>
+      <input type="range" id="dopamine" min="0" max="100" value="50">
+    </div>
+    <div class="slider-group">
+      <label for="cortisol">🔥 Cortisol: <span id="cortisolVal">40</span>%</label>
+      <input type="range" id="cortisol" min="0" max="100" value="40">
+    </div>
+
+    <button onclick="simularMedicion()">🔎 Realizar Medición</button>
+
+    <div class="recommendation" id="recomendacion">
+      Sigue así, estás en equilibrio.
+    </div>
+  </div>
+
+  <div class="visual">
+    <h3>🧠 Estado Emocional</h3>
+    <div class="estado" id="estadoAnimo">Neutral 😐</div>
+
+    <div class="figure">
+      <img src="cabeza.jpg" alt="Cabeza humana" class="head">
+      <img src="chip.png" alt="Sensor chip" class="chip">
+    </div>
+
+    <h3>📈 Historial de Mediciones</h3>
+    <canvas id="chart" height="200"></canvas>
+  </div>
+</div>
+
+<script>
+  const stress = document.getElementById('stress');
+  const dopamine = document.getElementById('dopamine');
+  const cortisol = document.getElementById('cortisol');
+  const stressVal = document.getElementById('stressVal');
+  const dopamineVal = document.getElementById('dopamineVal');
+  const cortisolVal = document.getElementById('cortisolVal');
+  const estadoAnimoEl = document.getElementById('estadoAnimo');
+  const recomendacionEl = document.getElementById('recomendacion');
+  const scanSound = document.getElementById('scanSound');
+  const finishBeep = document.getElementById('finishBeep');
+
+  const chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Estrés', borderColor: '#f87171', data: [] },
+        { label: 'Dopamina', borderColor: '#60a5fa', data: [] },
+        { label: 'Cortisol', borderColor: '#facc15', data: [] }
+      ]
+    },
+    options: {
+      animation: false,
+      scales: {
+        y: { min: 0, max: 100 },
+        x: { display: false }
+      },
+      plugins: {
+        legend: { labels: { color: 'white' } }
+      }
+    }
+  });
+
+  function simularMedicion() {
+    scanSound.currentTime = 0;
+    scanSound.play();
+
+    const sFinal = Math.floor(Math.random() * 101);
+    const dFinal = Math.floor(Math.random() * 101);
+    const cFinal = Math.floor(Math.random() * 101);
+
+    const steps = 10;
+    let currentStep = 0;
+
+    const sStart = +stress.value;
+    const dStart = +dopamine.value;
+    const cStart = +cortisol.value;
+
+    const interval = setInterval(() => {
+      currentStep++;
+      stress.value = Math.round(sStart + (sFinal - sStart) * currentStep / steps);
+      dopamine.value = Math.round(dStart + (dFinal - dStart) * currentStep / steps);
+      cortisol.value = Math.round(cStart + (cFinal - cStart) * currentStep / steps);
+      actualizarUI(false);
+
+      if (currentStep >= steps) {
+        clearInterval(interval);
+        finishBeep.play();
+        actualizarUI(true);
+      }
+    }, 150);
+  }
+
+  function actualizarUI(addToChart = false) {
+    const s = +stress.value;
+    const d = +dopamine.value;
+    const c = +cortisol.value;
+
+    stressVal.textContent = s;
+    dopamineVal.textContent = d;
+    cortisolVal.textContent = c;
+
+    let estado = 'Neutral 😐';
+    if (s > 70 || c > 70) estado = 'Estresado 😰';
+    else if (d > 70) estado = 'Feliz 😄';
+    else if (s < 30 && d > 40) estado = 'Relajado 😌';
+
+    estadoAnimoEl.textContent = estado;
+
+    let recomendacion = 'Sigue así, estás en equilibrio.';
+    if (s > 70) recomendacion = 'Tómate un descanso y respira profundamente.';
+    else if (c > 70) recomendacion = 'Intenta meditar o dar una caminata.';
+    else if (d < 30) recomendacion = 'Escucha tu canción favorita o haz algo que disfrutes.';
+    recomendacionEl.textContent = recomendacion;
+
+    if (addToChart) {
+      if (chart.data.labels.length >= 10) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds => ds.data.shift());
+      }
+
+      const now = new Date().toLocaleTimeString();
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(s);
+      chart.data.datasets[1].data.push(d);
+      chart.data.datasets[2].data.push(c);
+      chart.update();
+    }
+
+    document.body.style.background =
+      estado.includes('Feliz') ? 'linear-gradient(135deg, #34d399, #10b981)' :
+      estado.includes('Estresado') ? 'linear-gradient(135deg, #991b1b, #f43f5e)' :
+      'linear-gradient(135deg, #1e3a8a, #4f46e5)';
+  }
+
+  stress.oninput = () => actualizarUI(false);
+  dopamine.oninput = () => actualizarUI(false);
+  cortisol.oninput = () => actualizarUI(false);
+
+  actualizarUI();
+</script>
+</body>
+</html>
